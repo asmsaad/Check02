@@ -788,6 +788,12 @@ class ViolationTable:
     # print("Non-Hidden Rules:", detailed_result['non_hidden_rules'])
     # print("Hidden Categories:", detailed_result['hidden_cats'])
     # print("Non-Hidden Categories:", detailed_result['non_hidden_cats'])
+    
+    
+    #-----------------------------
+    def callback_file_open(self, path: str):
+        print(f"[ViolationTable]: {path}")
+        
        
 
 

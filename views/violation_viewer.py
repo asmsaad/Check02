@@ -65,13 +65,22 @@ class ViolationViewer:
         )
         table_header.pack(expand=True, fill=tk.X)
 
-        violation_table = ViolationTable(violation_viewr_layout)
+        self.violation_table = ViolationTable(violation_viewr_layout)
         
         self.meta_data_frame = ttk.Frame(master, padding=5, style="MacroMetaDataFrame.TFrame")
         self.meta_data_frame.pack(fill="x", anchor="n")
         self.macro_meta_data = MacroMetaDataFrame(self.meta_data_frame, data=None , style="MacroMetaDataFrame.TFrame")
         self.macro_meta_data.pack(fill="x", anchor="n")
 
+    #-----------------------------
+    def callback_file_open(self, path: str):
+        print(f"[ViolationViewer]: {path}")
+        self.violation_table.callback_file_open(path)
+        
+        
+        
+        
+        
 
 def setup_styles() -> None:
     """Configures all custom ttk styles for the application."""

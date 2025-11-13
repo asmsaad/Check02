@@ -19,14 +19,17 @@ class PinCheckScoreBoard(tk.Tk):
         self._init_layout()
 
     def _app_menu_handel(self):
+        callbacks =  {
+            'on_file_open': self.callback_file_open,
+        }
         app_menu = PinCheckScoreboardAppMenu(
-            master=self, callbacks={}, initial_history=[]
+            master=self, callbacks=callbacks, initial_history=[]
         )
         self.config(menu=app_menu)  # Attach the menu to the root window
         app_menu.bind_global_accelerators()  # Call the binding method
         
     def _init_layout(self):
-        vailation_viewer = ViolationViewer(self)
+        self.vailation_viewer = ViolationViewer(self)
         
 
     def _window_config(self):
@@ -35,6 +38,15 @@ class PinCheckScoreBoard(tk.Tk):
         window_config.title("Pin Check Scoreboard")
         window_config.geometry(align="center", width=1000, height=800)
         window_config.set_app_icon(app_icon)
+        
+        
+        
+    
+    #-----------------------------
+    def callback_file_open(self, path: str):
+        print(f"[PinCheckScoreBoard]: {path}")
+        self.vailation_viewer.callback_file_open(path) 
+        
         
         
 
