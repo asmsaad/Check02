@@ -7,6 +7,9 @@ import platform,os
 
 
 
+
+
+
 class ViolationAnalysisTabFrame(ttk.Frame):
     """
     ViolationAnalysisTabFrame displays mismatch data in a tabular format.
