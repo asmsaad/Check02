@@ -5,7 +5,7 @@ import time
 import random
 from typing import Callable
 
-class SpecLoaderUI(ttk.Frame):
+class SpecLoaderFrame(ttk.Frame):
     """
     Professional Async Loader.
     - Frame Padding: 20px (as requested).
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     def my_callback(val): print(f"Exec: {val}")
 
     # Note: No padding in pack(), because padding is now internal to the frame (20px)
-    app = SpecLoaderUI(root, on_macro_load=my_callback)
+    app = SpecLoaderFrame(root, on_macro_load=my_callback)
     app.pack(fill=tk.X, anchor="n")
 
     def test_external_update():
