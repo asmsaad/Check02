@@ -186,7 +186,7 @@ class ViolationAnalysisTabFrame(ttk.Frame):
         table_frame.columnconfigure(1, weight=1)
         table_frame.columnconfigure(2, weight=4) 
 
-        headers = [self.data.get("Ruel Name", "Rule"), "File Type", "File Path"]
+        headers = [self.data.get("Ruel Name", "Rule"), "Compare Source", "Path"]
         for col_idx, text in enumerate(headers):
             btn = ttk.Button(table_frame, text=text, style="GridHeader.TButton", state="normal")
             btn.grid(row=0, column=col_idx, sticky="ew", padx=1, pady=1)
@@ -385,7 +385,7 @@ if __name__ == "__main__":
     
     # Short valid data (Scrollbar should HIDE)
     valid_data_short = {
-        "Ruel Name": "Pin Direction Check",
+        "Ruel Name": "P_CEMISMATC",
         "message": "Critical Error: The pin direction defined in the CSV spec does not match the implementation.",
         "per_view": {
             "/path/specs.csv": "Output",  
@@ -396,7 +396,7 @@ if __name__ == "__main__":
 
     # Long valid data (Scrollbar should SHOW)
     valid_data_long = {
-        "Ruel Name": "Scroll Test",
+        "Ruel Name": "P_CEMISMATC",
         "message": "This list is long to demonstrate the dynamic scrollbar appearing.",
         "per_view": {f"/path/file_{i}.lef": ("Input" if i%2==0 else "Output") for i in range(25)}
     }
