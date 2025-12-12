@@ -58,6 +58,161 @@ from memphys_pin_check_scoreboard.psb_settings_and_config import load_scoreboard
 from memphys_pin_check_scoreboard.psb_utils import CellLevel, choose_level
 
 
+
+class TableManager:
+    """Encapsulates Treeview, header canvas and overlay badge pooling.
+
+    This class was extracted from ScoreboardApp._build_table to isolate table
+    creation and related operations while preserving behaviour. It expects an
+    application instance `app` which continues to own shared state and callback
+    methods; TableManager will set `app.tree` and `app.header_canvas` so the
+    rest of the application continues to work unchanged.
+    """
+
+    def __init__(self, app, parent):
+        self.app = app
+        self.parent = parent
+
+    def build(self):
+        """
+        Build the Treeview table and the header canvas.
+        
+        The `header_canvas` sits above the `Treeview` and is used to draw
+        category bands and rotated column labels. The Treeview columns for
+        rule cells are intentionally narrow — the human-readable labels are
+        rendered on the canvas instead.
+        """
+        base_cols = ["PIN", "DIR", "TYPE"]
+        # Category header band
+        # Make header canvas taller so rotated labels can render vertically
+        self.app.header_canvas = tk.Canvas(
+            parent,
+            height=self.app._header_height,
+            background="#d4d4d4",
+            highlightthickness=0,
+            bd=0,
+        )
+        self.app.header_canvas.grid(row=0, column=0, sticky="ew", padx=(2, 2), pady=(0, 0))
+        parent.grid_columnconfigure(0, weight=1)
+        self.app.tree = ttk.Treeview(
+            parent, columns=base_cols, show="headings", selectmode="browse"
+        )
+        
+        for c in base_cols:
+            w = 240 if c == "PIN" else 100
+            self.app.tree.heading(c, text=c)
+            self.app.tree.column(
+                c,
+                width=w,
+                anchor="center",
+                stretch="no",
+            )
+        # store scrollbars to coordinate overlay refresh
+        self.app.ysb = ttk.Scrollbar(
+            parent, orient="vertical", command=self.app._on_yscroll
+        )  # was: self.app.tree.yview
+        self.app.xsb = ttk.Scrollbar(parent, orient="horizontal", command=self.app._on_xscroll)
+        # y/x scrollcommand wrapper ensures overlay refresh when view changes
+        self.app.tree.configure(
+            yscrollcommand=self.app._on_tree_yscroll, xscrollcommand=self.app._tree_xscroll
+        )
+        self.app.tree.grid(row=2, column=0, sticky="nsew", padx=(2, 2), pady=(2, 2))
+        
+        # Vertical scrollbar stays to the right of the tree, fills vertically
+        self.app.ysb.grid(row=2, column=1, sticky="ns", padx=(0, 2), pady=(2, 2))
+        
+        # Horizontal scrollbar should span the full width under the tree
+        self.app.xsb.grid(row=3, column=0, sticky="ew", padx=(2, 2), pady=(0, 2))
+        
+        # Allow row 2 (the tree row) to grow; you already have this line
+        parent.grid_rowconfigure(2, weight=1)
+        self.app._retag_tree_colors()
+        self.app.tree.bind("<ButtonRelease-1>", self.app._on_cell_click)
+        self.app.tree.bind("<Button-3>", self.app._show_context_menu)
+        
+        # Also refresh overlays on tree resizing
+        self.app.tree.bind(
+            "<Configure>",
+            lambda e: (self.app._redraw_group_header(), self.app._schedule_badge_refresh()),
+        )
+        self.app.header_canvas.bind("<Configure>", lambda e: self.app._redraw_group_header())
+        self.app.header_canvas.bind("<Button-3>", self.app._on_header_right_click)
+        self.app.tree.bind("<MouseWheel>", lambda e: self.app._schedule_badge_refresh())
+        self.app.tree.bind("<Button-4>", lambda e: self.app._schedule_badge_refresh())
+        self.app.tree.bind("<Button-5>", lambda e: self.app._schedule_badge_refresh())
+        self.app.ctx = tk.Menu(self, tearoff=False)
+        self.app.ctx.add_command(
+            label="Copy Pin/Entity Name", command=lambda: self.app._ctx_copy("pin")
+        )
+        self.app.ctx.add_command(
+            label="Copy Cell Messages", command=lambda: self.app._ctx_copy("messages")
+        )
+        self.app.ctx.add_separator()
+        self.app.ctx.add_command(
+            label="Open Evidence (if path)", command=self.app._ctx_open_evidence
+        )
+        self.app.ctx.add_separator()
+        self.app.ctx.add_command(
+            label="Export This Row to CSV…", command=self.app._ctx_export_row
+        )
+        
+        
+        def _open_waiver_window(self) -> None:
+        """
+        Build real waiver data from the loaded run and open/refresh the Waiver window.
+        - If no YAML is loaded, inform the user.
+        - If the window is already created and showing, refresh its content.
+        - Otherwise inject data and show it.
+        """
+        if not self.app._rundata:
+            try:
+                messagebox.showinfo("Waiver", "Load a YAML first.")
+            except Exception:
+                pass
+            return
+        
+        try:
+            real_data = self.app._build_waiver_data()
+        except Exception as exc:
+            try:
+                messagebox.showerror("Waiver", f"Failed to build waiver data:\n{exc}")
+            except Exception:
+                pass
+            return
+        
+        # If window exists and is visible, refresh its frame content
+        try:
+            if getattr(self.app.waiver_window, "_window", None) is not None and self.app.waiver_window._window.winfo_exists():
+                # live refresh
+                if getattr(self.app.waiver_window, "rules_app", None):
+                    self.app.waiver_window.rules_app.load_data(real_data)
+                    # center to parent after refresh for good UX
+                    try:
+                        self.app.waiver_window._center_window()
+                    except Exception:
+                        pass
+                    return
+        except Exception:
+            pass
+        
+        # Inject new data and open
+        try:
+            self.app.waiver_window.data = real_data
+            self.app.waiver_window.show()
+        except Exception:
+            # As a fallback, recreate WaiverTopLevelWindow and open
+            try:
+                self.app.waiver_window = WaiverTopLevelWindow(self, title="Rules waiver", data=real_data, on_submit=on_submit_waiver)
+                self.app.waiver_window.show()
+            except Exception as exc2:
+                try:
+                    messagebox.showerror("Waiver", f"Unable to open Waiver window:\n{exc2}")
+                except Exception:
+                    pass
+        
+        # --- ADD: map pincheck severities to Waiver UI tokens ---
+
+
 # =======================
 # Main Scoreboard Window
 # =======================
@@ -1447,144 +1602,14 @@ class ScoreboardApp(tk.Tk):
         self._refresh_recent_menu()
 
     # ---------- TABLE + Category band ----------
+
     def _build_table(self, parent):
-        """
-        Build the Treeview table and the header canvas.
+        """Thin wrapper: delegate table creation to TableManager to keep the
+        original public API while isolating implementation details in a single
+        class for easier testing and maintenance."""
+        self.table_manager = TableManager(self, parent)
+        self.table_manager.build()
 
-        The `header_canvas` sits above the `Treeview` and is used to draw
-        category bands and rotated column labels. The Treeview columns for
-        rule cells are intentionally narrow — the human-readable labels are
-        rendered on the canvas instead.
-        """
-        base_cols = ["PIN", "DIR", "TYPE"]
-        # Category header band
-        # Make header canvas taller so rotated labels can render vertically
-        self.header_canvas = tk.Canvas(
-            parent,
-            height=self._header_height,
-            background="#d4d4d4",
-            highlightthickness=0,
-            bd=0,
-        )
-        self.header_canvas.grid(row=0, column=0, sticky="ew", padx=(2, 2), pady=(0, 0))
-        parent.grid_columnconfigure(0, weight=1)
-        self.tree = ttk.Treeview(
-            parent, columns=base_cols, show="headings", selectmode="browse"
-        )
-
-        for c in base_cols:
-            w = 240 if c == "PIN" else 100
-            self.tree.heading(c, text=c)
-            self.tree.column(
-                c,
-                width=w,
-                anchor="center",
-                stretch="no",
-            )
-        # store scrollbars to coordinate overlay refresh
-        self.ysb = ttk.Scrollbar(
-            parent, orient="vertical", command=self._on_yscroll
-        )  # was: self.tree.yview
-        self.xsb = ttk.Scrollbar(parent, orient="horizontal", command=self._on_xscroll)
-        # y/x scrollcommand wrapper ensures overlay refresh when view changes
-        self.tree.configure(
-            yscrollcommand=self._on_tree_yscroll, xscrollcommand=self._tree_xscroll
-        )
-        self.tree.grid(row=2, column=0, sticky="nsew", padx=(2, 2), pady=(2, 2))
-
-        # Vertical scrollbar stays to the right of the tree, fills vertically
-        self.ysb.grid(row=2, column=1, sticky="ns", padx=(0, 2), pady=(2, 2))
-
-        # Horizontal scrollbar should span the full width under the tree
-        self.xsb.grid(row=3, column=0, sticky="ew", padx=(2, 2), pady=(0, 2))
-
-        # Allow row 2 (the tree row) to grow; you already have this line
-        parent.grid_rowconfigure(2, weight=1)
-        self._retag_tree_colors()
-        self.tree.bind("<ButtonRelease-1>", self._on_cell_click)
-        self.tree.bind("<Button-3>", self._show_context_menu)
-
-        # Also refresh overlays on tree resizing
-        self.tree.bind(
-            "<Configure>",
-            lambda e: (self._redraw_group_header(), self._schedule_badge_refresh()),
-        )
-        self.header_canvas.bind("<Configure>", lambda e: self._redraw_group_header())
-        self.header_canvas.bind("<Button-3>", self._on_header_right_click)
-        self.tree.bind("<MouseWheel>", lambda e: self._schedule_badge_refresh())
-        self.tree.bind("<Button-4>", lambda e: self._schedule_badge_refresh())
-        self.tree.bind("<Button-5>", lambda e: self._schedule_badge_refresh())
-        self.ctx = tk.Menu(self, tearoff=False)
-        self.ctx.add_command(
-            label="Copy Pin/Entity Name", command=lambda: self._ctx_copy("pin")
-        )
-        self.ctx.add_command(
-            label="Copy Cell Messages", command=lambda: self._ctx_copy("messages")
-        )
-        self.ctx.add_separator()
-        self.ctx.add_command(
-            label="Open Evidence (if path)", command=self._ctx_open_evidence
-        )
-        self.ctx.add_separator()
-        self.ctx.add_command(
-            label="Export This Row to CSV…", command=self._ctx_export_row
-        )
-        
-    
-    def _open_waiver_window(self) -> None:
-        """
-        Build real waiver data from the loaded run and open/refresh the Waiver window.
-        - If no YAML is loaded, inform the user.
-        - If the window is already created and showing, refresh its content.
-        - Otherwise inject data and show it.
-        """
-        if not self._rundata:
-            try:
-                messagebox.showinfo("Waiver", "Load a YAML first.")
-            except Exception:
-                pass
-            return
-
-        try:
-            real_data = self._build_waiver_data()
-        except Exception as exc:
-            try:
-                messagebox.showerror("Waiver", f"Failed to build waiver data:\n{exc}")
-            except Exception:
-                pass
-            return
-
-        # If window exists and is visible, refresh its frame content
-        try:
-            if getattr(self.waiver_window, "_window", None) is not None and self.waiver_window._window.winfo_exists():
-                # live refresh
-                if getattr(self.waiver_window, "rules_app", None):
-                    self.waiver_window.rules_app.load_data(real_data)
-                    # center to parent after refresh for good UX
-                    try:
-                        self.waiver_window._center_window()
-                    except Exception:
-                        pass
-                    return
-        except Exception:
-            pass
-
-        # Inject new data and open
-        try:
-            self.waiver_window.data = real_data
-            self.waiver_window.show()
-        except Exception:
-            # As a fallback, recreate WaiverTopLevelWindow and open
-            try:
-                self.waiver_window = WaiverTopLevelWindow(self, title="Rules waiver", data=real_data, on_submit=on_submit_waiver)
-                self.waiver_window.show()
-            except Exception as exc2:
-                try:
-                    messagebox.showerror("Waiver", f"Unable to open Waiver window:\n{exc2}")
-                except Exception:
-                    pass
-
-    # --- ADD: map pincheck severities to Waiver UI tokens ---
     def _severity_to_waiver_token(self, sev: str) -> str:
         """
         Map pincheck severity strings to WaiverRuelsFrame expected badges.
